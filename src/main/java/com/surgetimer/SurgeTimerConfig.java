@@ -13,10 +13,28 @@ public interface SurgeTimerConfig extends Config
 		TICKS
 	}
 
+	enum FillDirection
+	{
+		BOTTOM_UP,
+		TOP_DOWN
+	}
+
+	@ConfigItem(
+		keyName = "fillDirection",
+		name = "Fill direction",
+		description = "Which way the potion gets its color back as the cooldown runs out",
+		position = 1
+	)
+	default FillDirection fillDirection()
+	{
+		return FillDirection.BOTTOM_UP;
+	}
+
 	@ConfigItem(
 		keyName = "timeFormat",
 		name = "Time format",
-		description = "Show the time left in minutes and seconds, or in game ticks"
+		description = "Show the time left in minutes and seconds, or in game ticks",
+		position = 2
 	)
 	default TimeFormat timeFormat()
 	{

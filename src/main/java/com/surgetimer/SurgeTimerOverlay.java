@@ -62,19 +62,22 @@ class SurgeTimerOverlay extends WidgetItemOverlay
 		Rectangle bounds = widgetItem.getCanvasBounds();
 		Shade shade = getShade(itemId);
 
-		// The potion gets its color back from the bottom up as the cooldown runs out, so the shade
-		// only covers the part above the edge. The edge moves over the potion itself rather than the
-		// whole item image, which has empty space around it, and fades out over a few rows.
+		// The potion gets its color back from one end as the cooldown runs out, so the shade only
+		// covers the part past the edge. The edge moves over the potion itself rather than the whole
+		// item image, which has empty space around it, and fades out over a few rows.
+		boolean bottomUp = config.fillDirection() == SurgeTimerConfig.FillDirection.BOTTOM_UP;
 		float left = (float) ticksLeft / SurgeTimerPlugin.COOLDOWN_TICKS;
-		float edge = shade.top - FADE_ROWS / 2f + (shade.bottom - shade.top + FADE_ROWS) * left;
+		// How far the shade reaches into the potion, counted from the end it's anchored to
+		float reach = (shade.bottom - shade.top + FADE_ROWS) * left - FADE_ROWS / 2f;
 		int width = shade.image.getWidth();
 		Composite composite = graphics.getComposite();
 		for (int row = shade.top; row < shade.bottom; row++)
 		{
-			float strength = Math.min(1, (edge - row) / FADE_ROWS + 0.5f);
+			float depth = bottomUp ? row - shade.top : shade.bottom - 1 - row;
+			float strength = Math.min(1, (reach - depth) / FADE_ROWS + 0.5f);
 			if (strength <= 0)
 			{
-				break;
+				continue;
 			}
 
 			graphics.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, strength));
