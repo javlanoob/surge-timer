@@ -26,7 +26,7 @@ import net.runelite.client.util.Text;
 
 @PluginDescriptor(
 	name = "Surge Timer",
-	description = "Darkens surge potions while they're on cooldown and shows when they can be drunk again",
+	description = "Puts a timer over the surge potion",
 	tags = {"surge", "potion", "special", "attack", "spec", "cooldown", "timer", "adrenaline"}
 )
 public class SurgeTimerPlugin extends Plugin
