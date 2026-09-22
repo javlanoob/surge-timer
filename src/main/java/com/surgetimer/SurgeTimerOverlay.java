@@ -16,16 +16,16 @@ import net.runelite.client.game.ItemManager;
 import net.runelite.client.ui.FontManager;
 import net.runelite.client.ui.overlay.WidgetItemOverlay;
 import net.runelite.client.util.AsyncBufferedImage;
-import net.runelite.client.util.ImageUtil;
 
 class SurgeTimerOverlay extends WidgetItemOverlay
 {
 	private static final Set<Integer> SURGE_POTIONS = ImmutableSet.of(
 		ItemID._4DOSESURGE, ItemID._3DOSESURGE, ItemID._2DOSESURGE, ItemID._1DOSESURGE);
+	private static final float SHADE_OPACITY = 0.6f;
 
 	private final SurgeTimerPlugin plugin;
 	private final ItemManager itemManager;
-	private final Map<Integer, BufferedImage> grayImages = new HashMap<>();
+	private final Map<Integer, BufferedImage> shades = new HashMap<>();
 
 	@Inject
 	SurgeTimerOverlay(SurgeTimerPlugin plugin, ItemManager itemManager)
@@ -35,9 +35,14 @@ class SurgeTimerOverlay extends WidgetItemOverlay
 		showOnInventory();
 	}
 
+	static boolean isSurgePotion(int itemId)
+	{
+		return SURGE_POTIONS.contains(itemId);
+	}
+
 	void clearCache()
 	{
-		grayImages.clear();
+		shades.clear();
 	}
 
 	@Override
@@ -49,16 +54,16 @@ class SurgeTimerOverlay extends WidgetItemOverlay
 		}
 
 		int ticksLeft = plugin.getTicksLeft();
-		Rectangle bounds = widgetItem.getDraggingCanvasBounds();
-		BufferedImage gray = getGrayImage(itemId);
+		Rectangle bounds = widgetItem.getCanvasBounds();
+		BufferedImage shade = getShade(itemId);
 
-		// The potion gets its color back from the top down as the cooldown runs out, so the gray
-		// copy drawn over it only covers the part below that line
-		int height = gray.getHeight();
-		int grayFrom = height - Math.min(height, height * ticksLeft / SurgeTimerPlugin.COOLDOWN_TICKS);
-		graphics.drawImage(gray,
-			bounds.x, bounds.y + grayFrom, bounds.x + gray.getWidth(), bounds.y + height,
-			0, grayFrom, gray.getWidth(), height, null);
+		// The potion gets its color back from the top down as the cooldown runs out, so the shade
+		// drawn over it only covers the part below that line
+		int height = shade.getHeight();
+		int shadeFrom = height - Math.min(height, height * ticksLeft / SurgeTimerPlugin.COOLDOWN_TICKS);
+		graphics.drawImage(shade,
+			bounds.x, bounds.y + shadeFrom, bounds.x + shade.getWidth(), bounds.y + height,
+			0, shadeFrom, shade.getWidth(), height, null);
 
 		String text = formatTime(ticksLeft);
 		graphics.setFont(FontManager.getRunescapeFont());
@@ -72,20 +77,26 @@ class SurgeTimerOverlay extends WidgetItemOverlay
 		graphics.drawString(text, x, y);
 	}
 
-	private BufferedImage getGrayImage(int itemId)
+	private BufferedImage getShade(int itemId)
 	{
-		return grayImages.computeIfAbsent(itemId, id ->
+		return shades.computeIfAbsent(itemId, id ->
 		{
-			// Item images load asynchronously, so the gray copy is filled in once it's ready
+			// Item images load asynchronously, so the shade is filled in once it's ready
 			AsyncBufferedImage image = itemManager.getImage(id);
-			BufferedImage gray = new BufferedImage(image.getWidth(), image.getHeight(), BufferedImage.TYPE_INT_ARGB);
+			BufferedImage shade = new BufferedImage(image.getWidth(), image.getHeight(), BufferedImage.TYPE_INT_ARGB);
 			image.onLoaded(() ->
 			{
-				Graphics2D g = gray.createGraphics();
-				g.drawImage(ImageUtil.grayscaleImage(image), 0, 0, null);
-				g.dispose();
+				// Black in the shape of the potion, keeping its edges' transparency
+				for (int y = 0; y < image.getHeight(); y++)
+				{
+					for (int x = 0; x < image.getWidth(); x++)
+					{
+						int alpha = (int) ((image.getRGB(x, y) >>> 24) * SHADE_OPACITY);
+						shade.setRGB(x, y, alpha << 24);
+					}
+				}
 			});
-			return gray;
+			return shade;
 		});
 	}
 
