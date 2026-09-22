@@ -1,7 +1,9 @@
 package com.surgetimer;
 
 import com.google.common.collect.ImmutableSet;
+import java.awt.AlphaComposite;
 import java.awt.Color;
+import java.awt.Composite;
 import java.awt.FontMetrics;
 import java.awt.Graphics2D;
 import java.awt.Rectangle;
@@ -22,11 +24,12 @@ class SurgeTimerOverlay extends WidgetItemOverlay
 	private static final Set<Integer> SURGE_POTIONS = ImmutableSet.of(
 		ItemID._4DOSESURGE, ItemID._3DOSESURGE, ItemID._2DOSESURGE, ItemID._1DOSESURGE);
 	private static final float SHADE_OPACITY = 0.6f;
+	private static final int FADE_ROWS = 4;
 
 	private final SurgeTimerPlugin plugin;
 	private final ItemManager itemManager;
 	private final SurgeTimerConfig config;
-	private final Map<Integer, BufferedImage> shades = new HashMap<>();
+	private final Map<Integer, Shade> shades = new HashMap<>();
 
 	@Inject
 	SurgeTimerOverlay(SurgeTimerPlugin plugin, ItemManager itemManager, SurgeTimerConfig config)
@@ -57,15 +60,29 @@ class SurgeTimerOverlay extends WidgetItemOverlay
 
 		int ticksLeft = plugin.getTicksLeft();
 		Rectangle bounds = widgetItem.getCanvasBounds();
-		BufferedImage shade = getShade(itemId);
+		Shade shade = getShade(itemId);
 
-		// The potion gets its color back from the top down as the cooldown runs out, so the shade
-		// drawn over it only covers the part below that line
-		int height = shade.getHeight();
-		int shadeFrom = height - Math.min(height, height * ticksLeft / SurgeTimerPlugin.COOLDOWN_TICKS);
-		graphics.drawImage(shade,
-			bounds.x, bounds.y + shadeFrom, bounds.x + shade.getWidth(), bounds.y + height,
-			0, shadeFrom, shade.getWidth(), height, null);
+		// The potion gets its color back from the bottom up as the cooldown runs out, so the shade
+		// only covers the part above the edge. The edge moves over the potion itself rather than the
+		// whole item image, which has empty space around it, and fades out over a few rows.
+		float left = (float) ticksLeft / SurgeTimerPlugin.COOLDOWN_TICKS;
+		float edge = shade.top - FADE_ROWS / 2f + (shade.bottom - shade.top + FADE_ROWS) * left;
+		int width = shade.image.getWidth();
+		Composite composite = graphics.getComposite();
+		for (int row = shade.top; row < shade.bottom; row++)
+		{
+			float strength = Math.min(1, (edge - row) / FADE_ROWS + 0.5f);
+			if (strength <= 0)
+			{
+				break;
+			}
+
+			graphics.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, strength));
+			graphics.drawImage(shade.image,
+				bounds.x, bounds.y + row, bounds.x + width, bounds.y + row + 1,
+				0, row, width, row + 1, null);
+		}
+		graphics.setComposite(composite);
 
 		String text = config.timeFormat() == SurgeTimerConfig.TimeFormat.TICKS
 			? Integer.toString(ticksLeft)
@@ -81,27 +98,54 @@ class SurgeTimerOverlay extends WidgetItemOverlay
 		graphics.drawString(text, x, y);
 	}
 
-	private BufferedImage getShade(int itemId)
+	private Shade getShade(int itemId)
 	{
 		return shades.computeIfAbsent(itemId, id ->
 		{
 			// Item images load asynchronously, so the shade is filled in once it's ready
 			AsyncBufferedImage image = itemManager.getImage(id);
-			BufferedImage shade = new BufferedImage(image.getWidth(), image.getHeight(), BufferedImage.TYPE_INT_ARGB);
+			Shade shade = new Shade(new BufferedImage(image.getWidth(), image.getHeight(), BufferedImage.TYPE_INT_ARGB));
 			image.onLoaded(() ->
 			{
 				// Black in the shape of the potion, keeping its edges' transparency
+				int top = image.getHeight();
+				int bottom = 0;
 				for (int y = 0; y < image.getHeight(); y++)
 				{
 					for (int x = 0; x < image.getWidth(); x++)
 					{
-						int alpha = (int) ((image.getRGB(x, y) >>> 24) * SHADE_OPACITY);
-						shade.setRGB(x, y, alpha << 24);
+						int alpha = image.getRGB(x, y) >>> 24;
+						shade.image.setRGB(x, y, (int) (alpha * SHADE_OPACITY) << 24);
+						if (alpha > 0)
+						{
+							top = Math.min(top, y);
+							bottom = Math.max(bottom, y + 1);
+						}
 					}
+				}
+
+				if (top < bottom)
+				{
+					shade.top = top;
+					shade.bottom = bottom;
 				}
 			});
 			return shade;
 		});
+	}
+
+	private static class Shade
+	{
+		private final BufferedImage image;
+		// Rows the potion itself takes up in the image
+		private int top;
+		private int bottom;
+
+		Shade(BufferedImage image)
+		{
+			this.image = image;
+			this.bottom = image.getHeight();
+		}
 	}
 
 	private static String formatTime(int ticks)
