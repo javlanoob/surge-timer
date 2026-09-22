@@ -12,6 +12,9 @@ import net.runelite.api.Player;
 import net.runelite.api.coords.WorldPoint;
 import net.runelite.api.events.ChatMessage;
 import net.runelite.api.events.GameTick;
+import net.runelite.api.events.NpcSpawned;
+import net.runelite.api.events.VarbitChanged;
+import net.runelite.api.gameval.NpcID;
 import net.runelite.api.gameval.VarbitID;
 import net.runelite.client.callback.ClientThread;
 import net.runelite.client.config.ConfigManager;
@@ -44,6 +47,7 @@ public class SurgeTimerPlugin extends Plugin
 	private static final Pattern TOB_ROOM_END = Pattern.compile("Wave '.+' .*complete!.*");
 	private static final Pattern DOOM_LEVEL_END = Pattern.compile("Delve level: .+ duration:.*");
 	private static final Pattern WAVE_START = Pattern.compile("Wave: \\d+");
+	private static final String SOL_HEREDIT_START = "Sol Heredit jumps down from his seat";
 	private static final int INFERNO_REGION = 9043;
 
 	@Inject
@@ -170,7 +174,28 @@ public class SurgeTimerPlugin extends Plugin
 		{
 			paused = true;
 		}
-		else if (WAVE_START.matcher(message).matches())
+		else if (WAVE_START.matcher(message).matches() || message.contains(SOL_HEREDIT_START))
+		{
+			paused = false;
+		}
+	}
+
+	@Subscribe
+	public void onVarbitChanged(VarbitChanged event)
+	{
+		// On while the fight in a Theatre of Blood room is going. It also turns off when leaving,
+		// but leaving removes the cooldown anyway.
+		if (event.getVarbitId() == VarbitID.TOB_CLIENT_WAVEPROGRESS_TYPE)
+		{
+			paused = event.getValue() == 0;
+		}
+	}
+
+	@Subscribe
+	public void onNpcSpawned(NpcSpawned event)
+	{
+		// Mokhaiotl appears when the next delve level starts
+		if (event.getNpc().getId() == NpcID.DOM_BOSS)
 		{
 			paused = false;
 		}
