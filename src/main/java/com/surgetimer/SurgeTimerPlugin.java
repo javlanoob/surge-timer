@@ -1,13 +1,15 @@
 package com.surgetimer;
 
+import com.google.inject.Provides;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-import com.google.inject.Provides;
 import javax.inject.Inject;
 import lombok.Getter;
 import net.runelite.api.ChatMessageType;
 import net.runelite.api.Client;
 import net.runelite.api.GameState;
+import net.runelite.api.Player;
+import net.runelite.api.coords.WorldPoint;
 import net.runelite.api.events.ChatMessage;
 import net.runelite.api.events.GameTick;
 import net.runelite.api.gameval.VarbitID;
@@ -36,6 +38,14 @@ public class SurgeTimerPlugin extends Plugin
 	private static final Pattern MINUTES = Pattern.compile("(\\d+) minutes?\\.");
 	private static final Pattern SECONDS = Pattern.compile("(\\d+) seconds?\\.");
 
+	// The cooldown pauses when one of these ends, until the next one starts
+	private static final Pattern COLOSSEUM_WAVE_END = Pattern.compile("Wave \\d+ completed! Wave duration:.*");
+	private static final String INFERNO_WAVE_END = "Wave completed!";
+	private static final Pattern TOB_ROOM_END = Pattern.compile("Wave '.+' .*complete!.*");
+	private static final Pattern DOOM_LEVEL_END = Pattern.compile("Delve level: .+ duration:.*");
+	private static final Pattern WAVE_START = Pattern.compile("Wave: \\d+");
+	private static final int INFERNO_REGION = 9043;
+
 	@Inject
 	private Client client;
 
@@ -55,6 +65,14 @@ public class SurgeTimerPlugin extends Plugin
 	private int ticksLeft;
 	// Lowest the local count can go before the varbit changes again
 	private int floor;
+	// Whether the cooldown is paused, like between Colosseum waves
+	private boolean paused;
+
+	@Provides
+	SurgeTimerConfig provideConfig(ConfigManager configManager)
+	{
+		return configManager.getConfig(SurgeTimerConfig.class);
+	}
 
 	@Override
 	protected void startUp()
@@ -62,6 +80,7 @@ public class SurgeTimerPlugin extends Plugin
 		varbit = 0;
 		ticksLeft = 0;
 		floor = 0;
+		paused = false;
 		overlayManager.add(overlay);
 		clientThread.invoke(() ->
 		{
@@ -82,13 +101,13 @@ public class SurgeTimerPlugin extends Plugin
 	@Subscribe
 	public void onGameTick(GameTick event)
 	{
-		if (sync() || ticksLeft == 0)
+		if (sync() || ticksLeft == 0 || paused)
 		{
 			return;
 		}
 
-		// Never count below what the varbit allows. When the cooldown is paused the varbit stops
-		// changing, so the timer stops here too instead of running out early.
+		// Never count below what the varbit allows. If the cooldown pauses without it being
+		// noticed, the varbit stops changing, so the timer stops here instead of running out.
 		ticksLeft = Math.max(ticksLeft - 1, floor);
 	}
 
@@ -98,12 +117,6 @@ public class SurgeTimerPlugin extends Plugin
 	 *
 	 * @return whether the varbit changed
 	 */
-	@Provides
-	SurgeTimerConfig provideConfig(ConfigManager configManager)
-	{
-		return configManager.getConfig(SurgeTimerConfig.class);
-	}
-
 	private boolean sync()
 	{
 		int value = client.getVarbitValue(VarbitID.SURGE_POTION_TIMER);
@@ -116,6 +129,8 @@ public class SurgeTimerPlugin extends Plugin
 		// removed, like by drinking from a house pool, which leaves it on 1 instead of 0.
 		boolean removed = value > 0 && value < varbit - 1;
 		varbit = value;
+		// The varbit only changes while the cooldown is running
+		paused = false;
 		if (removed)
 		{
 			ticksLeft = 0;
@@ -145,6 +160,19 @@ public class SurgeTimerPlugin extends Plugin
 		{
 			ticksLeft = 0;
 			floor = 0;
+			paused = false;
+		}
+		else if (COLOSSEUM_WAVE_END.matcher(message).matches()
+			|| TOB_ROOM_END.matcher(message).matches()
+			|| DOOM_LEVEL_END.matcher(message).matches()
+			// The Fight Caves say the same, but the cooldown doesn't pause there
+			|| (message.equals(INFERNO_WAVE_END) && inInferno()))
+		{
+			paused = true;
+		}
+		else if (WAVE_START.matcher(message).matches())
+		{
+			paused = false;
 		}
 	}
 
@@ -193,6 +221,13 @@ public class SurgeTimerPlugin extends Plugin
 		}
 
 		ticksLeft = ticksLeft == 0 ? high : Math.max(low, Math.min(high, ticksLeft));
+	}
+
+	private boolean inInferno()
+	{
+		Player player = client.getLocalPlayer();
+		return player != null
+			&& WorldPoint.fromLocalInstance(client, player.getLocalLocation()).getRegionID() == INFERNO_REGION;
 	}
 
 	private static int toTicks(int seconds)
