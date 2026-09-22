@@ -2,6 +2,7 @@ package com.surgetimer;
 
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import com.google.inject.Provides;
 import javax.inject.Inject;
 import lombok.Getter;
 import net.runelite.api.ChatMessageType;
@@ -11,6 +12,7 @@ import net.runelite.api.events.ChatMessage;
 import net.runelite.api.events.GameTick;
 import net.runelite.api.gameval.VarbitID;
 import net.runelite.client.callback.ClientThread;
+import net.runelite.client.config.ConfigManager;
 import net.runelite.client.eventbus.Subscribe;
 import net.runelite.client.plugins.Plugin;
 import net.runelite.client.plugins.PluginDescriptor;
@@ -96,6 +98,12 @@ public class SurgeTimerPlugin extends Plugin
 	 *
 	 * @return whether the varbit changed
 	 */
+	@Provides
+	SurgeTimerConfig provideConfig(ConfigManager configManager)
+	{
+		return configManager.getConfig(SurgeTimerConfig.class);
+	}
+
 	private boolean sync()
 	{
 		int value = client.getVarbitValue(VarbitID.SURGE_POTION_TIMER);

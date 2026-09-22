@@ -25,13 +25,15 @@ class SurgeTimerOverlay extends WidgetItemOverlay
 
 	private final SurgeTimerPlugin plugin;
 	private final ItemManager itemManager;
+	private final SurgeTimerConfig config;
 	private final Map<Integer, BufferedImage> shades = new HashMap<>();
 
 	@Inject
-	SurgeTimerOverlay(SurgeTimerPlugin plugin, ItemManager itemManager)
+	SurgeTimerOverlay(SurgeTimerPlugin plugin, ItemManager itemManager, SurgeTimerConfig config)
 	{
 		this.plugin = plugin;
 		this.itemManager = itemManager;
+		this.config = config;
 		showOnInventory();
 	}
 
@@ -65,7 +67,9 @@ class SurgeTimerOverlay extends WidgetItemOverlay
 			bounds.x, bounds.y + shadeFrom, bounds.x + shade.getWidth(), bounds.y + height,
 			0, shadeFrom, shade.getWidth(), height, null);
 
-		String text = formatTime(ticksLeft);
+		String text = config.timeFormat() == SurgeTimerConfig.TimeFormat.TICKS
+			? Integer.toString(ticksLeft)
+			: formatTime(ticksLeft);
 		graphics.setFont(FontManager.getRunescapeFont());
 		FontMetrics metrics = graphics.getFontMetrics();
 		int x = bounds.x + (bounds.width - metrics.stringWidth(text)) / 2;
