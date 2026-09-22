@@ -10,10 +10,8 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
 import javax.inject.Inject;
-import net.runelite.api.gameval.InterfaceID;
 import net.runelite.api.gameval.ItemID;
 import net.runelite.api.widgets.WidgetItem;
-import net.runelite.api.widgets.WidgetUtil;
 import net.runelite.client.game.ItemManager;
 import net.runelite.client.ui.FontManager;
 import net.runelite.client.ui.overlay.WidgetItemOverlay;
@@ -26,29 +24,15 @@ class SurgeTimerOverlay extends WidgetItemOverlay
 		ItemID._4DOSESURGE, ItemID._3DOSESURGE, ItemID._2DOSESURGE, ItemID._1DOSESURGE);
 
 	private final SurgeTimerPlugin plugin;
-	private final SurgeTimerConfig config;
 	private final ItemManager itemManager;
 	private final Map<Integer, BufferedImage> grayImages = new HashMap<>();
 
-	private boolean showInBank;
-	private Color timerColor;
-	private Color pausedColor;
-
 	@Inject
-	SurgeTimerOverlay(SurgeTimerPlugin plugin, SurgeTimerConfig config, ItemManager itemManager)
+	SurgeTimerOverlay(SurgeTimerPlugin plugin, ItemManager itemManager)
 	{
 		this.plugin = plugin;
-		this.config = config;
 		this.itemManager = itemManager;
 		showOnInventory();
-		showOnBank();
-	}
-
-	void loadConfig()
-	{
-		showInBank = config.showInBank();
-		timerColor = config.timerColor();
-		pausedColor = config.pausedColor();
 	}
 
 	void clearCache()
@@ -64,16 +48,19 @@ class SurgeTimerOverlay extends WidgetItemOverlay
 			return;
 		}
 
-		if (!showInBank && WidgetUtil.componentToInterface(widgetItem.getWidget().getId()) == InterfaceID.BANKMAIN)
-		{
-			return;
-		}
-
-		// Drawn over the potion itself, so the whole potion looks grayed out
+		int ticksLeft = plugin.getTicksLeft();
 		Rectangle bounds = widgetItem.getDraggingCanvasBounds();
-		graphics.drawImage(getGrayImage(itemId), bounds.x, bounds.y, null);
+		BufferedImage gray = getGrayImage(itemId);
 
-		String text = formatTime(plugin.getTicksLeft());
+		// The potion gets its color back from the top down as the cooldown runs out, so the gray
+		// copy drawn over it only covers the part below that line
+		int height = gray.getHeight();
+		int grayFrom = height - Math.min(height, height * ticksLeft / SurgeTimerPlugin.COOLDOWN_TICKS);
+		graphics.drawImage(gray,
+			bounds.x, bounds.y + grayFrom, bounds.x + gray.getWidth(), bounds.y + height,
+			0, grayFrom, gray.getWidth(), height, null);
+
+		String text = formatTime(ticksLeft);
 		graphics.setFont(FontManager.getRunescapeFont());
 		FontMetrics metrics = graphics.getFontMetrics();
 		int x = bounds.x + (bounds.width - metrics.stringWidth(text)) / 2;
@@ -81,7 +68,7 @@ class SurgeTimerOverlay extends WidgetItemOverlay
 
 		graphics.setColor(Color.BLACK);
 		graphics.drawString(text, x + 1, y + 1);
-		graphics.setColor(plugin.isPaused() ? pausedColor : timerColor);
+		graphics.setColor(Color.WHITE);
 		graphics.drawString(text, x, y);
 	}
 
