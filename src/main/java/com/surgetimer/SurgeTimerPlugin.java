@@ -112,7 +112,17 @@ public class SurgeTimerPlugin extends Plugin
 			return false;
 		}
 
+		// The varbit only counts down one step at a time. A bigger drop means the cooldown was
+		// removed, like by drinking from a house pool, which leaves it on 1 instead of 0.
+		boolean removed = value > 0 && value < varbit - 1;
 		varbit = value;
+		if (removed)
+		{
+			ticksLeft = 0;
+			floor = 0;
+			return true;
+		}
+
 		ticksLeft = value * TICKS_PER_STEP;
 		floor = value > 0 ? ticksLeft - TICKS_PER_STEP + 1 : 0;
 		return true;
